@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Billing App with Editable Products</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f3f3f3;
+            margin: 0;
+            padding: 0;
+        }
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin: 20px;
+            width: 100%;
+            max-width: 960px;
+        }
+        .product {
+            background-color: #fff;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.2s;
+            position: relative;
+        }
+        .product img {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+        }
+        .product:hover {
+            transform: scale(1.05);
+        }
+        .edit-button, .delete-button {
+            position: absolute;
+            top: 5px;
+            background: #ff9800;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 5px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .edit-button {
+            left: 5px;
+        }
+        .delete-button {
+            right: 5px;
+            background: #f44336;
+        }
+        .cart {
+            margin: 20px;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 8px;
+            width: 300px;
+            text-align: center;
+        }
+        .pay-button {
+            margin: 20px;
+            padding: 15px;
+            background-color: #4caf50;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 18px;
+        }
+        .progress-bar {
+            width: 100%;
+            max-width: 300px;
+            background: #ccc;
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 10px;
+        }
+        .progress {
+            height: 20px;
+            background: #4caf50;
+            width: 0;
+        }
+        .add-product-form, .edit-product-form {
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px;
+            width: 300px;
+            text-align: center;
+            display:
+            none;
+        }
+        .add-product-form input, .edit-product-form input {
+            margin: 5px 0;
+            width: 100%;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .add-product-form button, .edit-product-form button {
+            margin-top: 10px;
+            padding: 10px;
+            width: 100%;
+            background: #4caf50;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .menu-icon {
+            font-size: 24px;
+            cursor: pointer;
+            background: #fff;
+            border-radius: 15%;
+            padding: 10px;
+            box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.2);
+            margin-top: 10px;
+        }
+        .voice-button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+        .error-message {
+            color: red;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+
+        h1{
+            color: #ff9800;
+            font-size: 50px;
+        }
+        #qr{
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Stich</h1>
+
+    <div class="menu-icon" onclick="toggleAddProductForm()">Add Item🛒</div>
+    <button class="voice-button" onclick="toggleVoice()">Toggle Voice</button>
+
+    <div class="add-product-form" id="add-product-form">
+        <h2>Add a New Product</h2>
+        <input type="text" id="new-product-name" placeholder="Product Name">
+        <input type="number" id="new-product-price" placeholder="Price" min="1">
+        <input type="file" id="new-product-image" accept="image/*">
+        <div class="error-message" id="error-message"></div>
+        <button onclick="addNewProduct()">Add Product</button>
+    </div>
+
+    <div class="edit-product-form" id="edit-product-form">
+        <h2>Edit Product</h2>
+        <input type="text" id="edit-product-name" placeholder="Product Name">
+        <input type="number" id="edit-product-price" placeholder="Price" min="1">
+        <input type="file" id="edit-product-image" accept="image/*">
+        <button onclick="saveProductChanges()">Save Changes</button>
+        <button onclick="cancelEdit()">Cancel</button>
+    </div>
+
+    <div class="product-grid" id="product-grid"></div>
+
+    <div class="cart">
+        <h2>Cart🛒</h2>
+        <div id="cart-items"></div>
+        <p>Total: <span id="total">0</span> rupees</p>
+        <img src="abc.jpeg" id="qr" alt="">
+        <button class="pay-button" onclick="processPayment()">Pay Now</button>
+    </div>
+
+    <div class="progress-bar">
+        <div class="progress" id="progress"></div>
+    </div>
+
+    <script>
+        const maxFileSize = 100 * 1024; 
+        let cart = JSON.parse(localStorage.getItem("cart")) || [];
+        let products = JSON.parse(localStorage.getItem("products")) || [];
+        let total = parseInt(localStorage.getItem("total")) || 0;
+        let voiceEnabled = true;
+        let currentEditIndex = null;
+
+        window.onload = function() {
+            displayProducts();
+            updateCartDisplay();
+            updateProgress(total);
+        };
+
+        function addNewProduct() {
+            const name = document.getElementById('new-product-name').value;
+            const price = document.getElementById('new-product-price').value;
+            const imageInput = document.getElementById('new-product-image');
+            const errorMessage = document.getElementById('error-message');
+
+            if (!name || !price || !imageInput.files.length) {
+                errorMessage.textContent = 'Please fill in all fields and select an image.';
+                return;
+            }
+
+            const file = imageInput.files[0];
+            if (file.size <= maxFileSize) {
+                readAndDisplayImage(file, name, price);
+            } else {
+                resizeImage(file, 100, function(resizedImage) {
+                    readAndDisplayImage(resizedImage, name, price);
+                });
+            }
+        }
+
+        function readAndDisplayImage(file, name, price) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const product = {
+                    name,
+                    price,
+                    image: event.target.result
+                };
+                products.push(product);
+                localStorage.setItem("products", JSON.stringify(products));
+                displayProducts();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function displayProducts() {
+            const productGrid = document.getElementById('product-grid');
+            productGrid.innerHTML = '';
+            products.forEach((product, index) => {
+                const productDiv = document.createElement('div');
+                productDiv.className = 'product';
+                productDiv.innerHTML = `
+                    <img src="${product.image}" alt="${product.name}" />
+                    <p>${product.name}</p>
+                    <p>${product.price} rupees</p>
+                    <button class="edit-button" onclick="editProduct(${index})">Edit</button>
+                    <button class="delete-button" onclick="deleteProduct(${index})">Delete</button>
+                `;
+                productDiv.onclick = function() { addItem(product.name, parseInt(product.price)); };
+                productGrid.appendChild(productDiv);
+            });
+        }
+
+        function editProduct(index) {
+            const product = products[index];
+            document.getElementById('edit-product-name').value = product.name;
+            document.getElementById('edit-product-price').value = product.price;
+            document.getElementById('edit-product-form').style.display = 'block';
+            currentEditIndex = index;
+        }
+
+        function saveProductChanges() {
+            const name = document.getElementById('edit-product-name').value;
+            const price = document.getElementById('edit-product-price').value;
+            const imageInput = document.getElementById('edit-product-image').files[0];
+            
+            if (!name || !price) {
+                alert("Please fill in all fields.");
+                return;
+            }
+            const product = products[currentEditIndex];
+            product.name = name;
+            product.price = price;
+
+            if (imageInput) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    product.image = event.target.result;
+                    saveAndDisplayProducts();
+                };
+                reader.readAsDataURL(imageInput);
+            } else {
+                saveAndDisplayProducts();
+            }
+            cancelEdit();
+        }
+
+        function saveAndDisplayProducts() {
+            localStorage.setItem("products", JSON.stringify(products));
+            displayProducts();
+        }
+
+        function cancelEdit() {
+            document.getElementById('edit-product-form').style.display = 'none';
+        }
+
+        function deleteProduct(index) {
+            products.splice(index, 1);
+            saveAndDisplayProducts();
+        }
+
+        function addItem(item, price) {
+            cart.push({ item, price });
+            total += price;
+            updateCartDisplay();
+            updateProgress(total);
+            speak(`${item} added to the cart.`);
+            saveCartData();
+        }
+
+        function updateCartDisplay() {
+            const cartItemsDiv = document.getElementById('cart-items');
+            cartItemsDiv.innerHTML = cart.map((entry, index) => 
+                `<div>${entry.item} - ${entry.price} rupees <button onclick="removeFromCart(${index})">Remove</button></div>`
+            ).join('');
+            document.getElementById('total').innerText = total;
+        }
+
+        function removeFromCart(index) {
+            total -= cart[index].price;
+            cart.splice(index, 1);
+            updateCartDisplay();
+            updateProgress(total);
+            speak("Item removed from cart.");
+            saveCartData();
+        }
+
+        function processPayment() {
+            if (total > 0) {
+                speak(`Payment successful! Total paid: ${total} rupees.`);
+                resetCart();
+            } else {
+                speak("Your cart is empty.");
+            }
+        }
+
+        function resetCart() {
+            cart = [];
+            total = 0;
+            updateCartDisplay();
+            updateProgress(total);
+            saveCartData();
+        }
+
+        function updateProgress(value) {
+            const progress = document.getElementById('progress');
+            progress.style.width = `${Math.min(value, 100)}%`;
+        }
+
+        function saveCartData() {
+            localStorage.setItem("cart", JSON.stringify(cart));
+            localStorage.setItem("total", total.toString());
+        }
+
+        function speak(message) {
+            if (voiceEnabled) {
+                const utterance = new SpeechSynthesisUtterance(message);
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        function toggleVoice() {
+            voiceEnabled = !voiceEnabled;
+            speak(voiceEnabled ? "Voice enabled." : "Voice disabled.");
+        }
+
+        function resizeImage(file, maxSizeKB, callback) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    let width = img.width;
+                    let height = img.height;
+                    const maxFileSize = maxSizeKB * 1024;
+
+                    canvas.width                    = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    let quality = 0.9;
+                    let resizedDataUrl = canvas.toDataURL('image/jpeg', quality);
+
+                    while (resizedDataUrl.length > maxFileSize && quality > 0.1) {
+                        quality -= 0.1;
+                        resizedDataUrl = canvas.toDataURL('image/jpeg', quality);
+                    }
+
+                    fetch(resizedDataUrl)
+                        .then(res => res.blob())
+                        .then(blob => {
+                            const resizedFile = new File([blob], file.name, { type: 'image/jpeg' });
+                            callback(resizedFile);
+                        });
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function toggleAddProductForm() {
+            const form = document.getElementById('add-product-form');
+            form.style.display = form.style.display === 'none' || !form.style.display ? 'block' : 'none';
+            document.getElementById('error-message').textContent = '';
+            document.getElementById('new-product-name').value = '';
+            document.getElementById('new-product-price').value = '';
+            document.getElementById('new-product-image').value = '';
+        }
+    </script>
+</body>
+</html>
+
